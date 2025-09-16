@@ -1,16 +1,23 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-import secrets
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
-from auth_app import models, schemas
-from auth_app.database import engine, SessionLocal
+from db.session import SessionLocal
+import models
+import schemas
 
-# Create DB tables
-models.Base.metadata.create_all(bind=engine)
+router = APIRouter(prefix="/auth", tags=["auth"])
 
-app = FastAPI()
+# -------------------------------
+# Settings
+# -------------------------------
+SECRET_KEY = "super_secret_key_please_change"  # move to .env
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # -------------------------------
 # Dependency: DB Session
@@ -22,51 +29,61 @@ def get_db():
     finally:
         db.close()
 
-
 # -------------------------------
 # Helpers
 # -------------------------------
-def get_current_user(token: str = Header(None), db: Session = Depends(get_db)):
-    if not token:
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def hash_password(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(db: Session = Depends(get_db), authorization: str | None = Header(None)):
+    if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
-
-    db_session = db.query(models.Session).filter(models.Session.token == token).first()
-    if not db_session or db_session.expires_at < datetime.utcnow():
+    
+    token = authorization.split(" ")[1] if " " in authorization else authorization
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-    return db_session.user
-
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return user
 
 # -------------------------------
 # Routes
 # -------------------------------
-
-@app.post("/signup")
+@router.post("/signup", response_model=dict)
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    # Check if user already exists
     existing = db.query(models.User).filter(models.User.email == user.email).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
 
-    # Create new user
     db_user = models.User(
         first_name=user.first_name,
         last_name=user.last_name,
         email=user.email,
-        password=user.password,  # ⚠️ plain text
+        password_hash=hash_password(user.password),  # ✅ hashed
         role=user.role,
     )
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
 
-    # Create session token
-    token = secrets.token_hex(32)
-    expires = datetime.utcnow() + timedelta(days=30)
-    db_session = models.Session(user_id=db_user.id, token=token, expires_at=expires)
-    db.add(db_session)
-    db.commit()
-
+    token = create_access_token({"sub": str(db_user.id)})
     return {
         "success": True,
         "token": token,
@@ -79,20 +96,13 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
         },
     }
 
-
-@app.post("/login")
+@router.post("/login", response_model=dict)
 def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if not db_user or db_user.password != user.password:
+    if not db_user or not verify_password(user.password, db_user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Create new session token
-    token = secrets.token_hex(32)
-    expires = datetime.utcnow() + timedelta(days=30)
-    db_session = models.Session(user_id=db_user.id, token=token, expires_at=expires)
-    db.add(db_session)
-    db.commit()
-
+    token = create_access_token({"sub": str(db_user.id)})
     return {
         "success": True,
         "token": token,
@@ -105,8 +115,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
         },
     }
 
-
-@app.get("/me")
+@router.get("/me", response_model=dict)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
     return {
         "success": True,

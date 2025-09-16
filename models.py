@@ -1,0 +1,57 @@
+from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, func, Enum
+from sqlalchemy.orm import relationship
+from db.session import Base
+
+class RoleEnum(Enum):
+    USER = "user"
+    CREATOR = "creator"
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    # password = Column(String(200), nullable=False)
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
+
+    role = Column(String(20), default=RoleEnum.USER)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    wallet = relationship("Wallet", back_populates="user", uselist=False)
+    sessions = relationship("Session", back_populates="user")
+
+
+class Wallet(Base):
+    __tablename__ = "wallets"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    balance = Column(Numeric(12, 2), default=0.00)
+    currency = Column(String(3), default="NGN")
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="wallet")
+    transactions = relationship("Transaction", back_populates="wallet", cascade="all, delete-orphan")
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+    id = Column(Integer, primary_key=True)
+    wallet_id = Column(Integer, ForeignKey("wallets.id"), nullable=False)
+    type = Column(String(20))  #deposit, transfer
+    amount = Column(Numeric(12,2))
+    status = Column(String(20), default="pending")
+    reference = Column(String(255), unique=True, index=True, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    wallet = relationship("Wallet", back_populates="transactions")
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    token = Column(String, unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    user = relationship("User", back_populates="sessions")
