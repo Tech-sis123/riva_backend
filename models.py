@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, f
 from sqlalchemy.orm import relationship
 from db.session import Base
 
-class RoleEnum(Enum):
-    USER = "user"
+class RoleEnum(Enum): #fvgvgtbg
+    USER = "user" 
     CREATOR = "creator"
 
 class User(Base):
