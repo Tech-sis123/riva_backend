@@ -15,10 +15,16 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), default=RoleEnum.USER.value)
+    # password = Column(String(200), nullable=False)
+    first_name = Column(String, nullable=False)
+    last_name = Column(String, nullable=False)
+
+    role = Column(String(20), default=RoleEnum.USER)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     wallet = relationship("Wallet", back_populates="user", uselist=False)
+    sessions = relationship("Session", back_populates="user")
+
 
 class Wallet(Base):
     __tablename__ = "wallets"
@@ -42,3 +48,14 @@ class Transaction(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     wallet = relationship("Wallet", back_populates="transactions")
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    token = Column(String, unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    user = relationship("User", back_populates="sessions")
