@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 
 from db.session import SessionLocal
 import models
@@ -18,6 +20,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 # ✅ switched bcrypt -> argon2
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+#
 
 
 def get_db():
@@ -26,7 +29,7 @@ def get_db():
         yield db
     finally:
         db.close()
-
+security = HTTPBearer()
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -40,12 +43,12 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user(db: Session = Depends(get_db), authorization: str | None = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing token")
-    
-    token = authorization.split(" ")[-1]  # supports "Bearer <token>" or just "<token>"
-    
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    token = credentials.credentials  # Extract token after "Bearer "
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int = payload.get("sub")
@@ -53,11 +56,11 @@ def get_current_user(db: Session = Depends(get_db), authorization: str | None = 
             raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    
+
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return user
 
 
