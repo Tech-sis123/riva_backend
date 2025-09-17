@@ -20,12 +20,12 @@ def movie_to_dict(movie, user):
 
 @router.get("/list")
 def get_list(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    # 1️⃣ Get user preferences (from onboarding)
+    #Get user preferences (from onboarding)
     prefs = db.query(UserPreference).filter_by(user_id=user.id).first()
     preferred_genres = prefs.genres.split(",") if prefs and prefs.genres else []
     preferred_types = prefs.types.split(",") if prefs and prefs.types else []
 
-    # 2️⃣ Recommended movies (match user genres)
+    #Recommended movies (match user genres)
     recommended = (
         db.query(Movie)
         .filter(Movie.genre.in_(preferred_genres))
@@ -33,7 +33,7 @@ def get_list(db: Session = Depends(get_db), user: User = Depends(get_current_use
         .all()
     )
 
-    # 3️⃣ Suggestions grouped by genre
+    #Suggestions grouped by genre
     suggestions = {}
     for genre in preferred_genres:
         movies = (

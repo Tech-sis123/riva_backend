@@ -5,7 +5,6 @@ import os
 import uuid
 import subprocess
 
-# Router instance
 router = APIRouter(prefix="/content", tags=["Content"])
 
 UPLOAD_DIR = "uploads/"
@@ -20,7 +19,9 @@ def compress_video_multires(input_path: str, output_dir: str, file_id: str):
     """
     Generate HLS video with multiple resolutions (1080p, 720p, 480p)
     """
+    print("compressing to multiple resolutions...")
     master_playlist = os.path.join(output_dir, f"{file_id}_master.m3u8")
+    print("master playlist path:", master_playlist)
 
     command = [
         "ffmpeg", "-i", input_path,
@@ -47,8 +48,9 @@ def compress_video_multires(input_path: str, output_dir: str, file_id: str):
         "-master_pl_name", f"{file_id}_master.m3u8",
         os.path.join(output_dir, f"{file_id}_%v.m3u8")
     ]
-
+    print("running command:", " ".join(command))
     subprocess.run(command, check=True)
+    print("compression done.")
     return master_playlist
 
 
@@ -82,17 +84,27 @@ async def upload_video(
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
+        print("done with temp save")
+
         # Step 2: Compress into multiple resolutions
+        print("starting compression")
         output_dir = os.path.join(UPLOAD_DIR, file_id)
+        print("output dir:", output_dir)
         os.makedirs(output_dir, exist_ok=True)
         master_playlist = compress_video_multires(temp_path, output_dir, file_id)
+
+        print("done with compression")
 
         # Step 3: Generate thumbnail
         thumbnail_path = os.path.join(THUMBNAIL_DIR, f"{file_id}.jpg")
         generate_thumbnail(temp_path, thumbnail_path)
 
+        print("done with thumbnail")
+
         # Step 4: Remove original file
         os.remove(temp_path)
+
+        print("done with cleanup")
 
         # Step 5: Return response (save to DB in real app)
         return {
