@@ -7,21 +7,17 @@ from passlib.context import CryptContext
 from db.session import SessionLocal
 import models
 import schemas
+from config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# -------------------------------
-# Settings
-# -------------------------------
-SECRET_KEY = "super_secret_key_please_change"  # move to .env
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM 
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# -------------------------------
-# Dependency: DB Session
-# -------------------------------
+
 def get_db():
     db = SessionLocal()
     try:
@@ -29,9 +25,7 @@ def get_db():
     finally:
         db.close()
 
-# -------------------------------
-# Helpers
-# -------------------------------
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -63,9 +57,7 @@ def get_current_user(db: Session = Depends(get_db), authorization: str | None = 
     
     return user
 
-# -------------------------------
-# Routes
-# -------------------------------
+
 @router.post("/signup", response_model=dict)
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter(models.User.email == user.email).first()
