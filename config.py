@@ -10,7 +10,13 @@ class Settings(BaseSettings):
     PAYSTACK_CALLBACK_URL: str | None = None
     PAYSTACK_CANCEL_URL: str | None = None
 
+    refresh_token_expire_days: int = 7
+    reset_password_token_expire_minutes: int = 30
+
     class Config:
         env_file = ".env"
+        extra = "ignore"  # allows extra vars without crashing
+
 
 settings = Settings()
+

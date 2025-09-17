@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from db.session import get_db
 from models import ShareCode
-from auth import get_current_user
+from api.auth import get_current_user
 import datetime, uuid
 
 router = APIRouter(prefix="/share", tags=["share"])

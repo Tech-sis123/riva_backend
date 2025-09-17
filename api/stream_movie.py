@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from db.session import SessionLocal
 from models import Movie
-from auth import get_current_user  # <-- your JWT dependency
+from api.auth import get_current_user  # <-- your JWT dependency
 
 router = APIRouter(prefix="/movies", tags=["movies"])
 
