@@ -43,7 +43,8 @@ def get_current_user(db: Session = Depends(get_db), authorization: str | None = 
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
     
-    token = authorization.split(" ")[1] if " " in authorization else authorization
+    token = authorization.split(" ")[-1]  # take last part, works with "Bearer <token>" or just "<token>"
+    
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int = payload.get("sub")
