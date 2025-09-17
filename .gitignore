@@ -1,4 +1,5 @@
 .env
 venv/
-riva.db
 __pycache__/
+riva.db
+

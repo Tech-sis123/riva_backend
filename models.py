@@ -4,9 +4,13 @@ from sqlalchemy.orm import relationship
 from db.session import Base
 import datetime
 
-class RoleEnum(Enum):
-    USER = "user"
+class RoleEnum(Enum): #fvgvgtbg
+    USER = "user" 
     CREATOR = "creator"
+
+class TransactionTypeEnum(Enum):
+    FUND = "fund"
+    PAY = "pay"
 
 class User(Base):
     __tablename__ = "users"
@@ -39,7 +43,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True)
     wallet_id = Column(Integer, ForeignKey("wallets.id"), nullable=False)
-    type = Column(String(20))  #deposit, transfer
+    type = Column(String(20))  #fund, pay
     amount = Column(Numeric(12,2))
     status = Column(String(20), default="pending")
     reference = Column(String(255), unique=True, index=True, nullable=True)
