@@ -18,3 +18,7 @@ def create_access_token(subject: str, expires_minutes: int | None = None) -> str
 
 def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+
+#get the current date and time 
+def get_current_date() -> datetime:
+    return datetime.now(timezone.utc).date()
