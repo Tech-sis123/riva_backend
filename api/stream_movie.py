@@ -1,4 +1,3 @@
-# routers/movies.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from db.session import SessionLocal

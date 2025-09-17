@@ -1,7 +1,5 @@
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 from sqlalchemy.orm import Session
-from db.session import get_db
-from models import Movie
 import speech_recognition as sr
 from sqlalchemy import or_
 import tempfile
@@ -9,6 +7,10 @@ import os
 from openai import OpenAI
 from openai import OpenAI, APIError
 from dotenv import load_dotenv
+
+from db.session import get_db
+from models import Movie
+from config import settings
 
 # Load environment variables
 load_dotenv()
@@ -19,7 +21,8 @@ router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 # --- OpenRouter client setup ---
 # Ensure OPENROUTER_API_KEY is set in your environment variables or a .env file
 # using `pip install python-dotenv`
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = settings.OPENROUTER_API_KEY
 
 if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY environment variable not set.")
