@@ -11,6 +11,9 @@ def initialize_paystack_payment(db: Session, email: str, amount_decimal: Decimal
     payload = {
         "email": email,
         "amount": int(amount_decimal * 100),
+        "callback_url": settings.PAYSTACK_CALLBACK_URL or "https://hello.pstk.xyz/callback",
+        "metadata": {"cancel_action": "https://your-cancel-url.com"},
+        "metadata": {"cancel_action": settings.PAYSTACK_CANCEL_URL or "https://your-cancel-url.com"} 
     }
     headers = {
         "Authorization": f"Bearer {settings.PAYSTACK_SECRET}",
@@ -24,9 +27,14 @@ def initialize_paystack_payment(db: Session, email: str, amount_decimal: Decimal
         user = user_scopes.get_user_by_email(db, email)
         if user:
             wallet = wallet_scopes.get_wallet_by_user_id(db, user.id)
-            transaction_scopes.create_transaction(db, wallet_id=wallet.id, t_type="deposit", amount=amount_decimal, status="pending", reference=data["data"]["reference"])
+            transaction_scopes.create_transaction(db, wallet_id=wallet.id, t_type="fund", amount=amount_decimal, status="pending", reference=data["data"]["reference"])
             db.commit()
-    return data
+    # return data
+    if data.get("status") == True:
+        return {"success": True, "authorization_url": data["data"]["authorization_url"], "access_code": data["data"]["access_code"], "reference": data["data"]["reference"]}
+    else:
+        return {"success": False, "message": data.get("message", "Failed to initialize payment")}
+
 
 def verify_paystack_webhook(raw_body: bytes, signature_header: str) -> bool:
     secret = settings.PAYSTACK_WEBHOOK_SECRET or settings.PAYSTACK_SECRET
