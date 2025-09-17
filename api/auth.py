@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.responses import JSONResponse
@@ -16,7 +16,8 @@ SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM 
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# ✅ switched bcrypt -> argon2
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 
 def get_db():
@@ -35,7 +36,7 @@ def hash_password(password):
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -43,7 +44,7 @@ def get_current_user(db: Session = Depends(get_db), authorization: str | None = 
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing token")
     
-    token = authorization.split(" ")[-1]  # take last part, works with "Bearer <token>" or just "<token>"
+    token = authorization.split(" ")[-1]  # supports "Bearer <token>" or just "<token>"
     
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -69,12 +70,11 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
             content={"success": False, "message": "Email already registered"}
         )
     
-
     db_user = models.User(
         first_name=user.first_name,
         last_name=user.last_name,
         email=user.email,
-        password_hash=hash_password(user.password),  # ✅ hashed
+        password_hash=hash_password(user.password),  # ✅ argon2 hash
         role=user.role,
     )
     db.add(db_user)
@@ -94,13 +94,14 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
         },
     }
 
+
 @router.post("/login", response_model=dict)
 def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if not db_user or not verify_password(user.password, db_user.password_hash):
         return JSONResponse(
             status_code=401,
-            content = {"success": False, "message":"Invalid email or password"}
+            content={"success": False, "message": "Invalid email or password"}
         )
 
     token = create_access_token({"sub": str(db_user.id)})
@@ -115,6 +116,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
             "role": db_user.role,
         },
     }
+
 
 @router.get("/me", response_model=dict)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
