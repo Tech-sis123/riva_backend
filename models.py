@@ -93,3 +93,23 @@ class ShareCode(Base):
     expires_at = Column(DateTime, default=lambda: datetime.datetime.utcnow() + datetime.timedelta(days=1))
 
     movie = relationship("Movie")
+
+# models.py
+from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy.orm import declarative_base
+
+Base = declarative_base()
+
+
+class MovieFTS(Base):
+    # FTS5 tables are "virtual" and have a special structure
+    __tablename__ = 'movies_fts'
+    __table_args__ = {'sqlite_autoincrement': True}
+    
+    # We use a special primary key for FTS5
+    rowid = Column(Integer, primary_key=True)
+    
+    # These columns hold the text we want to search
+    title = Column(String)
+    genre = Column(String)
+    tags = Column(String)

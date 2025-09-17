@@ -4,7 +4,7 @@ from db.session import get_db
 from models import Movie, UserPreference, User
 from api.auth import get_current_user
 
-router = APIRouter(prefix="/api/v1", tags=["content"])
+router = APIRouter(prefix="/movies", tags=["content"])
 
 def movie_to_dict(movie, user):
     return {

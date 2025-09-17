@@ -4,10 +4,10 @@ from db.session import get_db
 from models import UserPreference, User
 from api.auth import get_current_user
 
-router = APIRouter(prefix="/api/v1/user", tags=["user"])
+router = APIRouter(prefix="/user", tags=["user"])
 
-# 🟢 Save or update preferences (from onboarding)
-@router.post("/preferences")
+# Save or update preferences (from onboarding)
+@router.post("/savepreferences")
 def save_preferences(preferences: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     existing = db.query(UserPreference).filter_by(user_id=user.id).first()
 
@@ -25,8 +25,8 @@ def save_preferences(preferences: dict, db: Session = Depends(get_db), user: Use
 
     return {"success": True, "message": "Preferences saved"}
 
-# 🟡 Fetch preferences
-@router.get("/preferences")
+# Fetch preferences
+@router.get("/fetchpreferences")
 def get_preferences(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     prefs = db.query(UserPreference).filter_by(user_id=user.id).first()
 

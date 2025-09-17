@@ -6,7 +6,7 @@ import uuid
 import subprocess
 
 # Router instance
-router = APIRouter(prefix="/api/v1/content", tags=["Content"])
+router = APIRouter(prefix="/content", tags=["Content"])
 
 UPLOAD_DIR = "uploads/"
 THUMBNAIL_DIR = "thumbnails/"
