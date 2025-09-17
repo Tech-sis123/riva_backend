@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from fastapi.responses import JSONResponse
 
 from db.session import SessionLocal
 import models
@@ -62,10 +63,11 @@ def get_current_user(db: Session = Depends(get_db), authorization: str | None = 
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter(models.User.email == user.email).first()
     if existing:
-        raise HTTPException(
+        return JSONResponse(
             status_code=409,
-            detail = {"success": False, "message": "Email already registered"}
+            content={"success": False, "message": "Email already registered"}
         )
+    
 
     db_user = models.User(
         first_name=user.first_name,
@@ -95,9 +97,9 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
 def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if not db_user or not verify_password(user.password, db_user.password_hash):
-        raise HTTPException(
+        return JSONResponse(
             status_code=401,
-            detail = {"success": False, "message":"Invalid email or password"}
+            content = {"success": False, "message":"Invalid email or password"}
         )
 
     token = create_access_token({"sub": str(db_user.id)})
