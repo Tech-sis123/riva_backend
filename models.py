@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, func, Enum
+import uuid
+from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, Boolean, func, Enum
 from sqlalchemy.orm import relationship
 from db.session import Base
+import datetime
 
 class RoleEnum(Enum): #fvgvgtbg
     USER = "user" 
@@ -59,3 +61,35 @@ class Session(Base):
     expires_at = Column(DateTime, nullable=False)
 
     user = relationship("User", back_populates="sessions")
+
+
+class Movie(Base):
+    __tablename__ = "movies"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String, nullable=False)
+    genre = Column(String, nullable=False)
+    year = Column(Integer)
+    tags = Column(String)  # store as comma-separated string or JSON
+    description = Column(String)
+    cover = Column(String)  # URL
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    genres = Column(String)  # e.g. "Action,Comedy,Drama"
+    types = Column(String)   # e.g. "Series,Full Movie"
+
+class ShareCode(Base):
+    __tablename__ = "share_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True)
+    movie_id = Column(Integer, ForeignKey("movies.id"))
+    shared_by = Column(Integer, ForeignKey("users.id"))
+    shared_with = Column(Integer, ForeignKey("users.id"), nullable=True)
+    redeemed = Column(Boolean, default=False)
+    expires_at = Column(DateTime, default=lambda: datetime.datetime.utcnow() + datetime.timedelta(days=1))
+
+    movie = relationship("Movie")
