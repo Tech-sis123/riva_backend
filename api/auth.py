@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi.responses import JSONResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-
 
 from db.session import SessionLocal
 import models
@@ -14,14 +13,21 @@ from config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Config
 SECRET_KEY = settings.SECRET_KEY
-ALGORITHM = settings.ALGORITHM 
+ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
-# ✅ switched bcrypt -> argon2
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
-#
+# Password context: argon2 for new users, bcrypt for old users
+pwd_context = CryptContext(
+    schemes=["argon2", "bcrypt"],
+    deprecated="auto"
+)
 
+security = HTTPBearer()
+
+
+# -------------------- Utilities -------------------- #
 
 def get_db():
     db = SessionLocal()
@@ -29,26 +35,28 @@ def get_db():
         yield db
     finally:
         db.close()
-security = HTTPBearer()
 
-def verify_password(plain_password, hashed_password):
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
-def hash_password(password):
+
+def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None):
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
-    token = credentials.credentials  # Extract token after "Bearer "
-
+    token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int = payload.get("sub")
@@ -64,6 +72,8 @@ def get_current_user(
     return user
 
 
+# -------------------- Routes -------------------- #
+
 @router.post("/signup", response_model=dict)
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     existing = db.query(models.User).filter(models.User.email == user.email).first()
@@ -77,7 +87,7 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
         first_name=user.first_name,
         last_name=user.last_name,
         email=user.email,
-        password_hash=hash_password(user.password),  # ✅ argon2 hash
+        password_hash=hash_password(user.password),  # hashed with argon2
         role=user.role,
     )
     db.add(db_user)
@@ -101,12 +111,32 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=dict)
 def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if not db_user or not verify_password(user.password, db_user.password_hash):
+    
+    if not db_user:
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "message": "Invalid email or password"}
+        )
+    
+    try:
+        password_valid = verify_password(user.password, db_user.password_hash)
+    except Exception:
+        return JSONResponse(
+            status_code=401,
+            content={"success": False, "message": "Invalid email or password"}
+        )
+    
+    if not password_valid:
         return JSONResponse(
             status_code=401,
             content={"success": False, "message": "Invalid email or password"}
         )
 
+    # Auto-upgrade old bcrypt hashes to argon2
+    if pwd_context.needs_update(db_user.password_hash):
+        db_user.password_hash = hash_password(user.password)
+        db.commit()
+    
     token = create_access_token({"sub": str(db_user.id)})
     return {
         "success": True,
