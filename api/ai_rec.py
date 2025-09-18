@@ -1,20 +1,15 @@
-from fastapi import APIRouter, Depends, UploadFile, File
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, UploadFile, File
 import openai
 import tempfile
 import speech_recognition as sr
 
-from db.session import get_db
-from models import Movie
-
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-
-# ---- Intent Classifier ----
-def detect_movie_intent(query: str) -> bool:
+# ---- Core Chat Logic ----
+def handle_chat(query: str):
     """
-    Uses LLM to classify if a query is about movie recommendations.
-    Returns True if it's a movie request, otherwise False.
+    Handles both normal conversation and African movie recommendations.
+    Uses the LLM only (no DB).
     """
     response = openai.ChatCompletion.create(
         model="tngtech/deepseek-r1t2-chimera:free",
@@ -22,75 +17,35 @@ def detect_movie_intent(query: str) -> bool:
             {
                 "role": "system",
                 "content": (
-                    "You are an intent classifier. "
-                    "Reply with only 'true' if the user is asking about movie recommendations "
-                    "or movies in general. Otherwise reply with 'false'."
+                    "You are a conversational assistant. "
+                    "If the user asks about movies or recommendations, "
+                    "suggest African movies (e.g. Nollywood, Ghallywood, South African cinema). "
+                    "If the user does not mention movies, just reply normally. "
+                    "Always respond in the same language the user used."
                 )
             },
             {"role": "user", "content": query}
         ],
-        max_tokens=5,
-        temperature=0.0
-    )
-
-    intent = response.choices[0].message["content"].strip().lower()
-    return intent == "true"
-
-
-# ---- Handle Chat (Core Logic) ----
-def handle_chat(query: str, db: Session):
-    is_movie_query = detect_movie_intent(query)
-
-    if is_movie_query:
-        # Query DB for matching movies
-        movies = db.query(Movie).filter(Movie.title.ilike(f"%{query}%")).all()
-        if movies:
-            return {
-                "success": True,
-                "reply": f"I found {len(movies)} movies related to '{query}'.",
-                "movies": [m.to_dict() for m in movies],
-            }
-        else:
-            return {
-                "success": True,
-                "reply": f"Sorry, I couldn’t find any movies for of your choice, let's discuss something else\n.",
-                "movies": []
-            }
-
-    # If not about movies → normal multilingual conversation
-    response = openai.ChatCompletion.create(
-        model="tngtech/deepseek-r1t2-chimera:free",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful conversational assistant. "
-                    "Always reply in the same language the user used."
-                )
-            },
-            {"role": "user", "content": query}
-        ],
-        max_tokens=300,
+        max_tokens=400,
         temperature=0.7
     )
     reply = response.choices[0].message["content"]
 
     return {
         "success": True,
-        "reply": reply,
-        "movies": None
+        "reply": reply
     }
 
 
-# ---- Text Endpoint ----
+# ---- Text Chat Endpoint ----
 @router.post("/")
-def chat(query: str, db: Session = Depends(get_db)):
-    return handle_chat(query, db)
+def chat(query: str):
+    return handle_chat(query)
 
 
-# ---- Voice Endpoint ----
+# ---- Voice Chat Endpoint ----
 @router.post("/voice")
-async def chat_voice(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def chat_voice(file: UploadFile = File(...)):
     # Save uploaded audio temporarily
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         content = await file.read()
@@ -105,9 +60,9 @@ async def chat_voice(file: UploadFile = File(...), db: Session = Depends(get_db)
     try:
         query = recognizer.recognize_google(audio)  # Uses Google Speech API
     except sr.UnknownValueError:
-        return {"success": False, "reply": "Sorry, I couldn’t understand the audio.", "movies": None}
+        return {"success": False, "reply": "Sorry, I couldn’t understand the audio."}
     except sr.RequestError as e:
-        return {"success": False, "reply": f"Speech Recognition error: {e}", "movies": None}
+        return {"success": False, "reply": f"Speech Recognition error: {e}"}
 
     # Handle as normal chat
-    return handle_chat(query, db)
+    return handle_chat(query)
