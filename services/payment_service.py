@@ -21,6 +21,7 @@ def initialize_paystack_payment(db: Session, email: str, amount_decimal: Decimal
     }
     resp = requests.post(PAYSTACK_INIT_URL, json=payload, headers=headers, timeout=10)
     data = resp.json()
+    print("Paystack init response:", data)
     #create a pending transaction record (if Paystack returns reference)
     if data.get("status") and data["data"].get("reference"):
         #find user wallet

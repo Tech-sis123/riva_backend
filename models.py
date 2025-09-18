@@ -8,6 +8,7 @@ from db.session import Base
 import datetime
 from sqlalchemy import text, inspect
 from sqlalchemy.orm import declarative_base, Session
+import cv2
 
 Base = declarative_base()
 
@@ -26,6 +27,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
+
+    b_wallet_address = Column(String(255), unique=True, index=True, nullable=True)
+    private_key = Column(String(255), unique=True, index=True, nullable=True)
 
     role = Column(String(20), default=RoleEnum.USER)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -77,9 +81,13 @@ class Movie(Base):
     title = Column(String, nullable=False)
     genre = Column(String, nullable=False)
     year = Column(Integer)
-    tags = Column(String)
+
+    tags = Column(String)  #store as comma-separated string or JSON
     description = Column(String)
-    cover = Column(String)
+    cover = Column(String)  #url to the cover imagd
+    url = Column(String) 
+    hash = Column(String, unique=True, index=True)  #hash of the video file
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class UserPreference(Base):
@@ -102,7 +110,6 @@ class ShareCode(Base):
 
     movie = relationship("Movie")
 
-# Your FTS table and function remain unchanged as they are not the cause of this specific error.
 
 class MovieFTS(Base):
     __tablename__ = 'movies_fts'
