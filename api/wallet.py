@@ -7,6 +7,7 @@ from services import wallet_service
 from utils import security
 from scopes import user_scopes, wallet_scopes, transaction_scopes
 import models
+from .auth import get_current_user
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
@@ -17,16 +18,16 @@ def get_db():
     finally:
         db.close()
 
-def get_current_user(db: Session = Depends(get_db), authorization: str | None = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing auth")
-    token = authorization.split(" ")[1]
-    payload = security.decode_access_token(token)
-    user_id = int(payload["sub"])
-    user = user_scopes.get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-    return user
+# def get_current_user(db: Session = Depends(get_db), authorization: str | None = Header(None)):
+#     if not authorization:
+#         raise HTTPException(status_code=401, detail="Missing auth")
+#     token = authorization.split(" ")[1]
+#     payload = security.decode_access_token(token)
+#     user_id = int(payload["sub"])
+#     user = user_scopes.get_user_by_id(db, user_id)
+#     if not user:
+#         raise HTTPException(status_code=401, detail="User not found")
+#     return user
 
 @router.get("/", response_model=dict)
 def get_my_wallet(user = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -54,7 +55,7 @@ def transfer(destination_email: str, amount: Decimal, user = Depends(get_current
 
 
 @router.post("/pay-for-today")
-def transfer(destination_email: str, amount: Decimal, user = Depends(get_current_user), db: Session = Depends(get_db)):
+def transfer(amount: Decimal, user = Depends(get_current_user), db: Session = Depends(get_db)):
     #check if user has paid today
     wallet = wallet_service.get_wallet(db, user.id)
     if not wallet:

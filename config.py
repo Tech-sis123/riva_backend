@@ -10,14 +10,20 @@ class Settings(BaseSettings):
     PAYSTACK_CALLBACK_URL: str | None = None
     PAYSTACK_CANCEL_URL: str | None = None
     OPENROUTER_API_KEY: str | None = None
+    RPC_URL: str = "https://rpc-amoy.polygon.technology/"
+    CHAIN_ID: int = 80002
+    DEPLOYER_PRIVATE_KEY: str
+    DEPLOYER_ADDRESS: str | None = None
 
     refresh_token_expire_days: int = 7
     reset_password_token_expire_minutes: int = 30
 
     class Config:
         env_file = ".env"
-        extra = "ignore"  # allows extra vars without crashing
+        extra = "ignore"
 
+def get_settings() -> Settings:
+    return Settings()
 
 settings = Settings()
 
