@@ -13,6 +13,7 @@ from models import Movie, MovieFTS
 import json
 from sqlalchemy.orm import Session
 import cv2
+import os
 
 from db.session import get_db
 import models
