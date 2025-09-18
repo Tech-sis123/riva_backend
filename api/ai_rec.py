@@ -4,7 +4,6 @@ import speech_recognition as sr
 from sqlalchemy import or_
 import tempfile
 import os
-from openai import OpenAI
 from openai import OpenAI, APIError
 from dotenv import load_dotenv
 
@@ -19,11 +18,7 @@ load_dotenv()
 router = APIRouter(prefix="/chatbot", tags=["chatbot"])
 
 # --- OpenRouter client setup ---
-# Ensure OPENROUTER_API_KEY is set in your environment variables or a .env file
-# using `pip install python-dotenv`
-# OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_KEY = settings.OPENROUTER_API_KEY
-
 if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY environment variable not set.")
 
@@ -32,75 +27,74 @@ client = OpenAI(
     api_key=OPENROUTER_API_KEY,
 )
 
-def refine_query_with_llm(user_text: str) -> str:
-    """
-    Use OpenRouter to refine user text into concise search keywords.
-    Example: "I want a funny sci-fi movie with space travel"
-    → "sci-fi, comedy, space travel"
-    """
-    try:
-        completion = client.chat.completions.create(
-            model="openai/gpt-4o-mini",  # Using a specific model via OpenRouter
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a movie assistant. Extract concise keywords "
-                        "for searching a movie database. Return ONLY the keywords, "
-                        "comma-separated. No extra text."
-                    ),
-                },
-                {"role": "user", "content": user_text},
-            ],
-            max_tokens=50,
-            temperature=0.3,
-        )
-
-        refined = completion.choices[0].message.content.strip()
-        return refined
-
-    except APIError as e:
-        print(f"OpenRouter API error: {e}")
-        # Fallback to returning the original text or a default
-        return user_text
-
 def search_movies(query_text: str, db: Session):
     """
     Search movies in DB by title, genre, or tags using refined query.
-    Performs a single, efficient query.
     """
-    keywords = [k.strip().lower() for k in query_text.split(",") if k.strip()]
+    keywords = [k.strip().lower() for k in query_text.split() if k.strip()]
     if not keywords:
         return []
 
-    # Use a list of OR conditions for the query
     filters = []
     for word in keywords:
         filters.append(Movie.genre.ilike(f"%{word}%"))
         filters.append(Movie.tags.ilike(f"%{word}%"))
         filters.append(Movie.title.ilike(f"%{word}%"))
 
-    return db.query(Movie).filter(or_(*filters)).limit(10).all()
+    return db.query(Movie).filter(or_(*filters)).limit(5).all()
+
+
+def engage_conversation(user_text: str, db: Session):
+    """
+    Let the LLM engage in conversation, but also attach movies if found.
+    """
+    # Try finding related movies
+    movies = search_movies(user_text, db)
+
+    # Prepare context for LLM
+    system_prompt = (
+        "You are a friendly multilingual movie assistant. "
+        "Engage in a natural conversation with the user in the SAME language they use. "
+        "If you found matching movies from the database, weave them naturally into your reply. "
+        "If no movie matches, just continue the conversation politely."
+    )
+
+    movie_context = ""
+    if movies:
+        movie_context = "Here are some movies I found: " + ", ".join(
+            [f"{m.title} ({m.year}) - {m.genre}" for m in movies]
+        )
+
+    try:
+        completion = client.chat.completions.create(
+            model="tngtech/deepseek-r1t2-chimera:free",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text},
+                {"role": "assistant", "content": movie_context},
+            ],
+            max_tokens=200,
+            temperature=0.7,
+        )
+
+        reply = completion.choices[0].message.content.strip()
+        return reply, movies
+
+    except APIError as e:
+        print(f"OpenRouter API error: {e}")
+        return "I'm sorry, something went wrong with my brain today 😅.", movies
 
 
 @router.post("/text")
 def chatbot_text(message: str = Form(...), db: Session = Depends(get_db)):
     """
-    Text chatbot: refine query with LLM, return matching movies.
+    Text chatbot: engage in conversation + recommend movies if relevant.
     """
-    refined = refine_query_with_llm(message)
-    movies = search_movies(refined, db)
-
-    if not movies:
-        return {
-            "success": True,
-            "reply": f"Sorry, I couldn’t find any movies for '{refined}'.",
-            "movies": [],
-        }
+    reply, movies = engage_conversation(message, db)
 
     return {
         "success": True,
-        "reply": f"Here are movies you can watch based on '{refined}':",
+        "reply": reply,
         "movies": [
             {
                 "id": m.id,
@@ -119,7 +113,7 @@ def chatbot_text(message: str = Form(...), db: Session = Depends(get_db)):
 @router.post("/voice")
 def chatbot_voice(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
-    Voice chatbot: upload audio, transcribe, refine with LLM, return movies.
+    Voice chatbot: upload audio, transcribe, engage in conversation + recommend movies if relevant.
     """
     recognizer = sr.Recognizer()
 
@@ -129,28 +123,19 @@ def chatbot_voice(file: UploadFile = File(...), db: Session = Depends(get_db)):
             tmp.flush()
             with sr.AudioFile(tmp.name) as source:
                 audio = recognizer.record(source)
-            
-            # Using Google Web Speech API for transcription
-            text = recognizer.recognize_google(audio)
+
+            text = recognizer.recognize_google(audio)  # Auto-detects language
 
     except sr.UnknownValueError:
         raise HTTPException(status_code=400, detail="Could not understand audio.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Transcription failed: {e}")
 
-    refined = refine_query_with_llm(text)
-    movies = search_movies(refined, db)
-
-    if not movies:
-        return {
-            "success": True,
-            "reply": f"Sorry, I couldn’t find any movies for '{refined}'.",
-            "movies": [],
-        }
+    reply, movies = engage_conversation(text, db)
 
     return {
         "success": True,
-        "reply": f"Here are movies you can watch based on '{refined}':",
+        "reply": reply,
         "movies": [
             {
                 "id": m.id,
