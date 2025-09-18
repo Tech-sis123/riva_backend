@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from db.session import SessionLocal
 from models import Movie
@@ -18,7 +19,7 @@ def get_db():
 @router.get("/{movie_id}/stream")
 def stream_movie(
     movie_id: int,
-    resolution: str = "720p",  # default resolution
+    resolution: str = "720p",  #default resolution
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
@@ -30,7 +31,7 @@ def stream_movie(
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
 
-    # Construct video path based on resolution
+    #construct video path based on resolution
     if resolution not in ["480p", "720p", "1080p"]:
         raise HTTPException(status_code=400, detail="Invalid resolution")
 
@@ -42,7 +43,6 @@ def stream_movie(
         "title": movie.title,
         "description": movie.description,
         "genre": movie.genre,
-        "type": movie.type,
         "requested_resolution": resolution,
-        "video_url": video_url
+        "video_url": FileResponse(video_url, media_type="video/mp4"),
     }

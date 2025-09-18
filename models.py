@@ -3,6 +3,7 @@ from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, B
 from sqlalchemy.orm import relationship
 from db.session import Base
 import datetime
+import cv2
 
 class RoleEnum(Enum): #fvgvgtbg
     USER = "user" 
@@ -20,6 +21,9 @@ class User(Base):
     # password = Column(String(200), nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
+
+    b_wallet_address = Column(String(255), unique=True, index=True, nullable=True)
+    private_key = Column(String(255), unique=True, index=True, nullable=True)
 
     role = Column(String(20), default=RoleEnum.USER)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -69,9 +73,12 @@ class Movie(Base):
     title = Column(String, nullable=False)
     genre = Column(String, nullable=False)
     year = Column(Integer)
-    tags = Column(String)  # store as comma-separated string or JSON
+    tags = Column(String)  #store as comma-separated string or JSON
     description = Column(String)
-    cover = Column(String)  # URL
+    cover = Column(String)  #url to the cover imagd
+    url = Column(String) 
+    hash = Column(String, unique=True, index=True)  #hash of the video file
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class UserPreference(Base):
@@ -93,13 +100,6 @@ class ShareCode(Base):
     expires_at = Column(DateTime, default=lambda: datetime.datetime.utcnow() + datetime.timedelta(days=1))
 
     movie = relationship("Movie")
-
-# models.py
-from sqlalchemy import Column, Integer, String, Text
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
-
 
 class MovieFTS(Base):
     # FTS5 tables are "virtual" and have a special structure
