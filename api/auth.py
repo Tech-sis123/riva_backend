@@ -155,21 +155,22 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=dict)
-def read_users_me(current_user: models.User = Depends(get_current_user)):
-    db: Session = next(get_db())
-    user: schemas.UserLogin
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
-
+def read_users_me(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     wallet_id = wallet_scopes.get_wallet_by_user_id(db, current_user.id)
-    # paid = user_has_paid_today(db: Session, wallet_id: int)
+    paid = user_has_paid_today(db, wallet_id)
+
     return {
         "success": True,
         "user": {
-            "id": current_user.id,
-            "first_name": current_user.first_name,
-            "last_name": current_user.last_name,
-            "email": current_user.email,
-            "role": current_user.role,
-            "has_paid": 
+            "id":current_user.id,
+            "first_name":current_user.first_name,
+            "last_name":current_user.last_name,
+            "email":current_user.email,
+            "role":current_user.role,
+            "has_paid":user_has_paid_today(db, wallet_id)
         },
     }
+

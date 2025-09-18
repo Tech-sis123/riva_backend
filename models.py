@@ -1,10 +1,17 @@
+# models.py
+
+from cgitb import text
 import uuid
 from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, Boolean, func, Enum
 from sqlalchemy.orm import relationship
 from db.session import Base
 import datetime
+from sqlalchemy import text, inspect
+from sqlalchemy.orm import declarative_base, Session
 
-class RoleEnum(Enum): #fvgvgtbg
+Base = declarative_base()
+
+class RoleEnum(Enum): 
     USER = "user" 
     CREATOR = "creator"
 
@@ -17,7 +24,6 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
-    # password = Column(String(200), nullable=False)
     first_name = Column(String, nullable=False)
     last_name = Column(String, nullable=False)
 
@@ -25,7 +31,8 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     wallet = relationship("Wallet", back_populates="user", uselist=False)
-    sessions = relationship("Session", back_populates="user")
+    # The name is now "UserSession" to match the renamed class below.
+    sessions = relationship("UserSession", back_populates="user")
 
 
 class Wallet(Base):
@@ -43,7 +50,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True)
     wallet_id = Column(Integer, ForeignKey("wallets.id"), nullable=False)
-    type = Column(String(20))  #fund, pay
+    type = Column(String(20))
     amount = Column(Numeric(12,2))
     status = Column(String(20), default="pending")
     reference = Column(String(255), unique=True, index=True, nullable=True)
@@ -51,8 +58,8 @@ class Transaction(Base):
 
     wallet = relationship("Wallet", back_populates="transactions")
 
-
-class Session(Base):
+# The class name has been changed to `UserSession` to avoid conflict.
+class UserSession(Base):
     __tablename__ = "sessions"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -60,6 +67,7 @@ class Session(Base):
     token = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(DateTime, nullable=False)
 
+    # The back-reference now points back to the correct model name.
     user = relationship("User", back_populates="sessions")
 
 
@@ -69,17 +77,17 @@ class Movie(Base):
     title = Column(String, nullable=False)
     genre = Column(String, nullable=False)
     year = Column(Integer)
-    tags = Column(String)  # store as comma-separated string or JSON
+    tags = Column(String)
     description = Column(String)
-    cover = Column(String)  # URL
+    cover = Column(String)
 
 
 class UserPreference(Base):
     __tablename__ = "user_preferences"
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    genres = Column(String)  # e.g. "Action,Comedy,Drama"
-    types = Column(String)   # e.g. "Series,Full Movie"
+    genres = Column(String)
+    types = Column(String)
 
 class ShareCode(Base):
     __tablename__ = "share_codes"
@@ -94,22 +102,36 @@ class ShareCode(Base):
 
     movie = relationship("Movie")
 
-# models.py
-from sqlalchemy import Column, Integer, String, Text
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
-
+# Your FTS table and function remain unchanged as they are not the cause of this specific error.
 
 class MovieFTS(Base):
-    # FTS5 tables are "virtual" and have a special structure
     __tablename__ = 'movies_fts'
     __table_args__ = {'sqlite_autoincrement': True}
     
-    # We use a special primary key for FTS5
     rowid = Column(Integer, primary_key=True)
-    
-    # These columns hold the text we want to search
     title = Column(String)
     genre = Column(String)
     tags = Column(String)
+
+def create_and_populate_fts_table(db: Session):
+    inspector = inspect(db.bind)
+
+    if 'movies_fts' not in inspector.get_table_names():
+        print("Creating FTS table 'movies_fts'...")
+        db.execute(text("""
+            CREATE VIRTUAL TABLE movies_fts USING fts5(
+                title, 
+                genre, 
+                tags,
+                content='movies',
+                content_rowid='id'
+            );
+        """))
+        db.execute(text("""
+            INSERT INTO movies_fts(rowid, title, genre, tags)
+            SELECT id, title, genre, tags FROM movies;
+        """))
+        db.commit()
+        print("FTS table 'movies_fts' created and populated.")
+    else:
+        print("FTS table 'movies_fts' already exists.")

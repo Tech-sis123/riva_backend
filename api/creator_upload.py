@@ -1,23 +1,22 @@
-from fastapi import APIRouter, UploadFile, File, Form
+from fastapi import APIRouter, UploadFile, File, Form, Depends
 from fastapi.responses import JSONResponse
 import os
 import uuid
 import subprocess
 import imageio_ffmpeg as ffmpeg
+from sqlalchemy.orm import Session
+from db.session import get_db
+from models import Movie, MovieFTS
 
 router = APIRouter(prefix="/content", tags=["Content"])
 
-# Directories for uploads and thumbnails
 UPLOAD_DIR = "uploads"
 THUMBNAIL_DIR = "thumbnails"
 
-# Ensure directories exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(THUMBNAIL_DIR, exist_ok=True)
 
-# Get ffmpeg binary path from imageio-ffmpeg
 FFMPEG_BIN = ffmpeg.get_ffmpeg_exe()
-
 
 def compress_video_multires(input_path: str, output_dir: str, file_id: str):
     """
@@ -71,10 +70,11 @@ async def upload_video(
     title: str = Form(...),
     description: str = Form(...),
     genre: str = Form(...),
-    file: UploadFile = File(...)
+    tags: str = Form(""), # Added tags to the form
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
 ):
     try:
-        # Step 1: Save temporary uploaded file
         file_ext = os.path.splitext(file.filename)[1]
         file_id = str(uuid.uuid4())
         temp_path = os.path.join(UPLOAD_DIR, f"{file_id}{file_ext}")
@@ -83,19 +83,41 @@ async def upload_video(
         with open(temp_path, "wb") as f:
             f.write(content)
 
-        # Step 2: Compress video into multiple resolutions
         output_dir = os.path.join(UPLOAD_DIR, file_id)
         os.makedirs(output_dir, exist_ok=True)
         master_playlist = compress_video_multires(temp_path, output_dir, file_id)
 
-        # Step 3: Generate thumbnail
         thumbnail_path = os.path.join(THUMBNAIL_DIR, f"{file_id}.jpg")
         generate_thumbnail(temp_path, thumbnail_path)
 
-        # Step 4: Remove original uploaded file
         os.remove(temp_path)
 
-        # Step 5: Return response
+        # --- THIS IS THE CRITICAL MISSING CODE ---
+        # 1. Create a new Movie record in the database
+        new_movie = Movie(
+            id=file_id,
+            title=title,
+            description=description,
+            genre=genre,
+            tags=tags,
+            cover=thumbnail_path,
+            video_master_playlist=master_playlist
+        )
+        db.add(new_movie)
+        
+        # 2. Add a new record to the FTS table for search
+        new_fts_entry = MovieFTS(
+            rowid=new_movie.id,
+            title=title,
+            genre=genre,
+            tags=tags
+        )
+        db.add(new_fts_entry)
+
+        # 3. Commit the changes to the database
+        db.commit()
+        # --- END OF MISSING CODE ---
+
         return {
             "success": True,
             "message": "Video uploaded successfully",
