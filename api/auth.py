@@ -5,11 +5,14 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-
+from scopes import wallet_scopes
 from db.session import SessionLocal
 import models
+from scopes.transaction_scopes import user_has_paid_today
+from services.wallet_service import get_wallet
 import schemas
 from config import settings
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -153,6 +156,12 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=dict)
 def read_users_me(current_user: models.User = Depends(get_current_user)):
+    db: Session = next(get_db())
+    user: schemas.UserLogin
+    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+
+    wallet_id = wallet_scopes.get_wallet_by_user_id(db, current_user.id)
+    # paid = user_has_paid_today(db: Session, wallet_id: int)
     return {
         "success": True,
         "user": {
@@ -161,5 +170,6 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
             "last_name": current_user.last_name,
             "email": current_user.email,
             "role": current_user.role,
+            "has_paid": 
         },
     }
