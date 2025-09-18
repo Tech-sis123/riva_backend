@@ -10,7 +10,7 @@ import argostranslate.translate
 router = APIRouter(prefix="/subtitles", tags=["subtitles"])
 
 # Load Whisper once
-whisper_model = whisper.load_model("small")  # options: tiny, base, small, medium, large
+whisper_model = whisper.load_model("tiny")  # options: tiny, base, small, medium, large
 
 @router.post("/generate")
 def generate_and_translate_subtitles(

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from api import auth, wallet, payments, share_movie, redeem, creator_upload, movie_list, onboarding, stream_movie, search, ai_rec
+from api import auth, wallet, payments, share_movie, redeem, creator_upload,subtitle, movie_list, onboarding, stream_movie, search, ai_rec
 from db.session import engine, Base, get_db
 import models
 from models import create_and_populate_fts_table
@@ -40,3 +40,4 @@ app.include_router(search.router)
 app.include_router(ai_rec.router)
 app.include_router(share_movie.router)
 app.include_router(redeem.router)
+app.include_router(subtitle.router)
