@@ -1,11 +1,15 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends
 from fastapi.responses import JSONResponse, FileResponse
 import shutil
-import os
+#import os
 import uuid
 from web3 import Web3
 import hashlib
 import subprocess
+import imageio_ffmpeg as ffmpeg
+from sqlalchemy.orm import Session
+from db.session import get_db
+from models import Movie, MovieFTS
 import json
 from sqlalchemy.orm import Session
 import cv2
@@ -19,9 +23,13 @@ from utils import hash_file
 
 router = APIRouter(prefix="/content", tags=["Content"])
 
-UPLOAD_DIR = "uploads/"
-THUMBNAIL_DIR = "thumbnails/"
+UPLOAD_DIR = "uploads"
+THUMBNAIL_DIR = "thumbnails"
 
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(THUMBNAIL_DIR, exist_ok=True)
+
+FFMPEG_BIN = ffmpeg.get_ffmpeg_exe()
 RPC_URL = settings.RPC_URL
 CHAIN_ID = settings.CHAIN_ID
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
@@ -43,27 +51,22 @@ def compress_video_multires(input_path: str, output_dir: str, file_id: str):
     """
     Generate HLS video with multiple resolutions (1080p, 720p, 480p)
     """
-    print("compressing to multiple resolutions...")
     master_playlist = os.path.join(output_dir, f"{file_id}_master.m3u8")
-    print("master playlist path:", master_playlist)
 
     command = [
-        "ffmpeg", "-i", input_path,
+        FFMPEG_BIN, "-i", input_path,
         # 1080p
         "-map", "0:v:0", "-map", "0:a:0",
         "-c:v:0", "libx265", "-b:v:0", "5000k", "-s:v:0", "1920x1080",
         "-c:a:0", "aac", "-b:a:0", "128k",
-
         # 720p
         "-map", "0:v:0", "-map", "0:a:0",
         "-c:v:1", "libx265", "-b:v:1", "2800k", "-s:v:1", "1280x720",
         "-c:a:1", "aac", "-b:a:1", "128k",
-
         # 480p
         "-map", "0:v:0", "-map", "0:a:0",
         "-c:v:2", "libx265", "-b:v:2", "1200k", "-s:v:2", "854x480",
         "-c:a:2", "aac", "-b:a:2", "96k",
-
         # HLS options
         "-f", "hls",
         "-hls_time", "6",
@@ -72,9 +75,8 @@ def compress_video_multires(input_path: str, output_dir: str, file_id: str):
         "-master_pl_name", f"{file_id}_master.m3u8",
         os.path.join(output_dir, f"{file_id}_%v.m3u8")
     ]
-    print("running command:", " ".join(command))
+
     subprocess.run(command, check=True)
-    print("compression done.")
     return master_playlist
 
 
@@ -275,6 +277,7 @@ async def upload_video(
     title: str = Form(...),
     description: str = Form(...),
     genre: str = Form(...),
+
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -301,6 +304,7 @@ async def upload_video(
         file_path = os.path.join(UPLOAD_DIR, f"{file_id}{file_ext}")
         print("file path:", file_path)
 
+
         with open(file_path, "wb") as buffer:
             print("writing to file...")
             shutil.copyfileobj(file.file, buffer)
@@ -311,6 +315,7 @@ async def upload_video(
         # Step 2: Generate thumbnail
         thumbnail_path = os.path.join(THUMBNAIL_DIR, f"{file_id}.jpg")
         generate_thumbnail(file_path, thumbnail_path)
+
 
         print("done with thumbnail")
 
@@ -364,7 +369,13 @@ async def upload_video(
             "thumbnail": thumbnail_path
         }
 
+    except subprocess.CalledProcessError as e:
+        return JSONResponse(
+            {"success": False, "message": f"FFmpeg failed: {e}"},
+            status_code=500
+        )
     except Exception as e:
+
         # Clean up the file in case of failure
         if os.path.exists(file_path):
             os.remove(file_path)
