@@ -1,6 +1,5 @@
 # models.py
 
-from cgitb import text
 import uuid
 from sqlalchemy import Column, Integer, String, Numeric, ForeignKey, DateTime, Boolean, func, Enum
 from sqlalchemy.orm import relationship
